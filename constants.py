@@ -1,4 +1,3 @@
-# constants.py
 # Screen dimensions and settings
 WIDTH = 1200
 HEIGHT = 900
@@ -36,3 +35,14 @@ PROMOTION_PIECES = ['bishop', 'knight', 'rook', 'queen']
 # Game states
 MENU = 0
 PLAYING = 1
+TIME_SELECT = 2
+
+# Time controls
+BULLET = 0  # 1 min
+BLITZ = 1   # 3 min
+RAPID = 2   # 10 min
+CLASSICAL = 3  # 30 min
+
+# Time in seconds
+TIME_CONTROLS = [60, 180, 600, 1800]  # 1, 3, 10, 30 minutes
+TIME_NAMES = ["Bullet", "Blitz", "Rapid", "Classical"]
