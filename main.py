@@ -6,6 +6,7 @@ def main():
     # Initialize pygame
     pygame.init()
 
+    # Create game instance and start game loop
     game = ChessGame()
     game.run()
 
