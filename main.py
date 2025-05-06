@@ -1,12 +1,11 @@
 # main.py
 import pygame
-from chess_project.chess_game import ChessGame
+from chess_game import ChessGame
 
 def main():
     # Initialize pygame
     pygame.init()
 
-    # Create game instance and start game loop
     game = ChessGame()
     game.run()
 
