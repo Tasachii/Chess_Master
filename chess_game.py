@@ -20,6 +20,7 @@ class ChessGame:
         self.counter = 0  # For animations
         self.check = False
         self.winner = ''
+        self.winner_by_time = False  # Flag for win by timeout
         self.game_over = False
         self.white_promote = False
         self.black_promote = False
@@ -27,65 +28,16 @@ class ChessGame:
         self.board_flipped = False  # False = white at bottom, True = black at bottom
         self.last_flip_time = 0  # Prevents rapid consecutive button presses
 
+        # Add variables for time control
+        self.time_control = BLITZ  # Default value
+        self.white_time = 0  # Will be set when time mode is selected
+        self.black_time = 0  # Will be set when time mode is selected
+        self.last_move_time = 0  # Time of the last move
+
         # Game state
         self.game_state = MENU  # Start with menu screen
 
-        # Initialize sounds if available
-        self.init_sounds()
-
         # FIXME: Need to implement proper AI opponent later
-
-    def init_sounds(self):
-        # Initialize pygame mixer
-        pygame.mixer.init()
-
-        # Set default empty sounds
-        self.move_sound = None
-        self.capture_sound = None
-        self.check_sound = None
-        self.promote_sound = None
-        self.game_start_sound = None
-        self.game_end_sound = None
-
-        # Create sounds directory if it doesn't exist
-        os.makedirs("sounds", exist_ok=True)
-
-        # Try to load sounds if they exist
-        try:
-            if os.path.exists("sounds/move.wav"):
-                self.move_sound = pygame.mixer.Sound('sounds/move.wav')
-                self.move_sound.set_volume(0.5)
-
-            if os.path.exists("sounds/capture.wav"):
-                self.capture_sound = pygame.mixer.Sound('sounds/capture.wav')
-                self.capture_sound.set_volume(0.6)
-
-            if os.path.exists("sounds/check.wav"):
-                self.check_sound = pygame.mixer.Sound('sounds/check.wav')
-                self.check_sound.set_volume(0.7)
-
-            if os.path.exists("sounds/promote.wav"):
-                self.promote_sound = pygame.mixer.Sound('sounds/promote.wav')
-                self.promote_sound.set_volume(0.6)
-
-            if os.path.exists("sounds/game_start.wav"):
-                self.game_start_sound = pygame.mixer.Sound('sounds/game_start.wav')
-                self.game_start_sound.set_volume(0.5)
-
-            if os.path.exists("sounds/game_end.wav"):
-                self.game_end_sound = pygame.mixer.Sound('sounds/game_end.wav')
-                self.game_end_sound.set_volume(0.7)
-        except FileNotFoundError as e:
-            print(f"Warning: Sound file not found: {e.filename}. Game will continue without sounds.")
-        except Exception:
-            print("Warning: Some sound files couldn't be loaded. Game will continue without sounds.")
-
-    def play_sound(self, sound_obj):
-        if sound_obj:
-            try:
-                sound_obj.play()
-            except:
-                pass  # Continue without sound if there's an error
 
     def run(self):
         game_running = True  # More descriptive than just 'run'
@@ -101,8 +53,14 @@ class ChessGame:
             # Handle game based on current state
             if self.game_state == MENU:
                 game_running = self.handle_menu()
+            elif self.game_state == TIME_SELECT:
+                game_running = self.handle_time_selection()
             elif self.game_state == PLAYING:
                 game_running = self.handle_gameplay()
+
+                # Update timers during gameplay
+                if not self.game_over and not self.white_promote and not self.black_promote:
+                    self.update_timers()
 
             pygame.display.flip()
 
@@ -110,7 +68,7 @@ class ChessGame:
 
     def handle_menu(self):
         # Draw side selection menu
-        white_button, black_button = self.board.draw_menu()
+        white_button, black_button, quit_button = self.board.draw_menu()
 
         # Check for mouse clicks on buttons
         for event in pygame.event.get():
@@ -122,17 +80,107 @@ class ChessGame:
 
                 if white_button.collidepoint(mouse_pos):
                     # Set to play as white
-                    self.board.set_playing_side(True)
+                    self.board.playing_as_white = True  # Direct assignment instead of method call
                     # White pieces at bottom (not flipped)
                     self.board_flipped = False
-                    self.start_game()
+                    # Go to time selection screen
+                    self.game_state = TIME_SELECT
 
                 elif black_button.collidepoint(mouse_pos):
                     # Set to play as black
-                    self.board.set_playing_side(False)
+                    self.board.playing_as_white = False  # Direct assignment instead of method call
                     # Black pieces at bottom (flipped)
                     self.board_flipped = True
-                    self.start_game()
+                    # Go to time selection screen
+                    self.game_state = TIME_SELECT
+
+                elif quit_button.collidepoint(mouse_pos):
+                    # Exit the game
+                    return False
+
+        return True
+
+    def handle_time_selection(self):
+        # Draw time selection screen
+        self.screen.fill(DARK_GRAY)
+
+        # Draw title
+        title_font = pygame.font.Font('freesansbold.ttf', 60)
+        title = title_font.render("Select Time Control", True, GOLD)
+        title_rect = title.get_rect(center=(WIDTH // 2, 150))
+        self.screen.blit(title, title_rect)
+
+        # Create buttons for each time mode
+        button_width, button_height = 400, 80
+        buttons = []
+
+        for i in range(4):
+            y_pos = 250 + i * 100
+            button = pygame.Rect(WIDTH // 2 - button_width // 2, y_pos, button_width, button_height)
+            buttons.append(button)
+
+            # Check if mouse is over button
+            mouse_pos = pygame.mouse.get_pos()
+            hover = button.collidepoint(mouse_pos)
+
+            # Draw button with hover effect
+            if hover:
+                pygame.draw.rect(self.screen, LIGHT_BLUE, button.inflate(10, 10), border_radius=15)
+            pygame.draw.rect(self.screen, WOOD_BROWN, button, border_radius=15)
+            pygame.draw.rect(self.screen, GOLD if hover else WOOD_DARK, button, 4, border_radius=15)
+
+            # Draw text on button
+            button_font = pygame.font.Font('freesansbold.ttf', 36)
+            minutes = TIME_CONTROLS[i] // 60
+            text = f"{TIME_NAMES[i]}: {minutes} minute{'s' if minutes > 1 else ''}"
+            button_text = button_font.render(text, True, CREAM_WHITE)
+            text_rect = button_text.get_rect(center=button.center)
+            self.screen.blit(button_text, text_rect)
+
+        # Create a Back button in the bottom left corner
+        back_button = pygame.Rect(30, HEIGHT - 80, 120, 50)
+        back_hover = back_button.collidepoint(mouse_pos)
+
+        # Draw back button with hover effect
+        if back_hover:
+            pygame.draw.rect(self.screen, LIGHT_BLUE, back_button.inflate(10, 10), border_radius=10)
+        pygame.draw.rect(self.screen, WOOD_DARK, back_button, border_radius=10)
+        pygame.draw.rect(self.screen, GOLD if back_hover else WOOD_BROWN, back_button, 3, border_radius=10)
+
+        # Back button text
+        back_font = pygame.font.Font('freesansbold.ttf', 24)
+        back_text = back_font.render("Back", True, CREAM_WHITE)
+        back_text_rect = back_text.get_rect(center=back_button.center)
+        self.screen.blit(back_text, back_text_rect)
+
+        # Check for input
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return False
+
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                mouse_pos = pygame.mouse.get_pos()
+
+                # Check if Back button was clicked
+                if back_button.collidepoint(mouse_pos):
+                    self.game_state = MENU
+                    return True
+
+                # Check time selection buttons
+                for i, button in enumerate(buttons):
+                    if button.collidepoint(mouse_pos):
+                        # Select time mode
+                        self.time_control = i
+                        self.white_time = TIME_CONTROLS[i]
+                        self.black_time = TIME_CONTROLS[i]
+                        # Start game
+                        self.start_game()
+                        break
+
+            # Allow ESC to go back to side selection
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    self.game_state = MENU
 
         return True
 
@@ -146,14 +194,39 @@ class ChessGame:
         self.counter = 0
         self.check = False
         self.winner = ''
+        self.winner_by_time = False
         self.game_over = False
         self.white_promote = False
         self.black_promote = False
         self.promo_index = 100
+
+        # Make sure board setup is consistent with selected side
         self.board.setup_board()
 
-        # Play game start sound
-        self.play_sound(self.game_start_sound)
+        # Record start time
+        self.last_move_time = pygame.time.get_ticks()
+
+    def update_timers(self):
+        # Reduce time only for the side that's currently playing
+        current_time = pygame.time.get_ticks()
+        elapsed = (current_time - self.last_move_time) / 1000  # Convert to seconds
+
+        if self.turn_step < 2:  # White's turn
+            self.white_time -= elapsed
+            if self.white_time <= 0:
+                self.white_time = 0
+                self.winner = BLACK
+                self.winner_by_time = True
+                self.game_over = True
+        else:  # Black's turn
+            self.black_time -= elapsed
+            if self.black_time <= 0:
+                self.black_time = 0
+                self.winner = WHITE
+                self.winner_by_time = True
+                self.game_over = True
+
+        self.last_move_time = current_time
 
     def handle_gameplay(self):
         try:
@@ -169,17 +242,14 @@ class ChessGame:
             # Draw everything
             self.screen.fill(DARK_GRAY)
             self.board.draw_board(self.board_flipped)
-            self.board.draw_status_area(self.turn_step)
+            # Pass time values to status area
+            self.board.draw_status_area(self.turn_step, self.white_time, self.black_time)
             self.board.draw_pieces(self.turn_step, self.selection, self.board_flipped)
             self.board.draw_captured()
 
             # Check for check condition and draw indicator
             previous_check = self.check
             self.check = self.board.draw_check(self.counter, self.board_flipped)
-
-            # Play check sound if just entered check
-            if not previous_check and self.check:
-                self.play_sound(self.check_sound)
 
             # Handle promotion
             if not self.game_over:
@@ -222,11 +292,9 @@ class ChessGame:
                 if self.turn_step < 2 and self.board.is_checkmate(WHITE):
                     self.winner = BLACK
                     self.game_over = True
-                    self.play_sound(self.game_end_sound)
                 elif self.turn_step >= 2 and self.board.is_checkmate(BLACK):
                     self.winner = WHITE
                     self.game_over = True
-                    self.play_sound(self.game_end_sound)
 
             # Show game over screen if needed
             if self.winner:
@@ -258,7 +326,6 @@ class ChessGame:
             if forfeit_rect.collidepoint(pos):
                 self.winner = BLACK if self.turn_step <= 1 else WHITE
                 self.game_over = True
-                self.play_sound(self.game_end_sound)
             return
 
         click_coords = (x_coord, y_coord)
@@ -308,8 +375,8 @@ class ChessGame:
                                     # Move rook to castling position
                                     rook.move(rook_pos)
 
-                                    # Play move sound
-                                    self.play_sound(self.move_sound)
+                                    # Update last move time for timer
+                                    self.last_move_time = pygame.time.get_ticks()
 
                                 self.turn_step = 2
                                 self.selection = 100
@@ -369,8 +436,8 @@ class ChessGame:
                                     # Move rook to castling position
                                     rook.move(rook_pos)
 
-                                    # Play move sound
-                                    self.play_sound(self.move_sound)
+                                    # Update last move time for timer
+                                    self.last_move_time = pygame.time.get_ticks()
 
                                 self.turn_step = 0
                                 self.selection = 100
@@ -510,18 +577,14 @@ class ChessGame:
         # Move the piece
         piece.move(new_position)
 
-        # Play appropriate sound
-        if capture_occurred:
-            self.play_sound(self.capture_sound)
-        else:
-            self.play_sound(self.move_sound)
+        # Update last move time for timer
+        self.last_move_time = pygame.time.get_ticks()
 
         # Check for checkmate after move
         opponent_color = BLACK if piece.color == WHITE else WHITE
         if self.board.is_checkmate(opponent_color):
             self.winner = WHITE if piece.color == WHITE else BLACK
             self.game_over = True
-            self.play_sound(self.game_end_sound)
 
         return True
 
@@ -571,14 +634,10 @@ class ChessGame:
 
             self.white_promote = False
 
-            # Play promotion sound
-            self.play_sound(self.promote_sound)
-
             # Check for checkmate after promotion
             if self.board.is_checkmate(BLACK):
                 self.winner = WHITE
                 self.game_over = True
-                self.play_sound(self.game_end_sound)
 
         elif self.black_promote:
             # Get pawn position
@@ -591,14 +650,10 @@ class ChessGame:
 
             self.black_promote = False
 
-            # Play promotion sound
-            self.play_sound(self.promote_sound)
-
             # Check for checkmate after promotion
             if self.board.is_checkmate(WHITE):
                 self.winner = BLACK
                 self.game_over = True
-                self.play_sound(self.game_end_sound)
 
     def check_promotion_selection(self):
         # Track mouse hover for promotion options
@@ -653,11 +708,16 @@ class ChessGame:
         message_font = pygame.font.Font('freesansbold.ttf', 24)
 
         # Winner text
-        winner_text = "White Win" if self.winner == WHITE else "Black Win"
-        title = title_font.render(winner_text, True, CREAM_WHITE)
+        win_text = "White Win" if self.winner == WHITE else "Black Win"
+
+        # Add text indicating win by timeout
+        if self.winner_by_time:
+            win_text += " by Timeout"
+
+        title = title_font.render(win_text, True, CREAM_WHITE)
 
         # Message prompting to press Enter to play again
-        message = message_font.render("Please Enter to play again", True, CREAM_WHITE)
+        message = message_font.render("Press Enter to play again", True, CREAM_WHITE)
 
         # Center messages
         self.screen.blit(title, (panel_rect.centerx - title.get_width() // 2, panel_rect.y + 60))
@@ -666,8 +726,10 @@ class ChessGame:
         self.game_over = True
 
     def reset_game(self):
-        # Reset the game state but keep the same side
+        # Reset the game state but keep the same side and time control
         playing_as_white = self.board.playing_as_white
+        current_time_control = self.time_control
+
         self.board = ChessBoard(self.screen)
         self.board.playing_as_white = playing_as_white
         self.board.setup_board()
@@ -679,18 +741,17 @@ class ChessGame:
         self.counter = 0
         self.check = False
         self.winner = ''
+        self.winner_by_time = False
         self.game_over = False
         self.white_promote = False
         self.black_promote = False
         self.promo_index = 100
 
         # Set board orientation based on which side is playing
-        # If playing as white, board is not flipped
-        # If playing as black, board is flipped
         self.board_flipped = not playing_as_white
 
-        # Reinitialize the sound effects
-        self.init_sounds()
-
-        # Play game start sound
-        self.play_sound(self.game_start_sound)
+        # Reset timers
+        self.time_control = current_time_control
+        self.white_time = TIME_CONTROLS[self.time_control]
+        self.black_time = TIME_CONTROLS[self.time_control]
+        self.last_move_time = pygame.time.get_ticks()
