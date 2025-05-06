@@ -185,11 +185,16 @@ class ChessBoard:
         white_button = pygame.Rect(WIDTH // 2 - 175, 300, 350, 90)
         black_button = pygame.Rect(WIDTH // 2 - 175, 420, 350, 90)
 
+        # Create smaller quit button in bottom right
+        quit_button = pygame.Rect(WIDTH - 150, HEIGHT - 80, 120, 50)
+
         # Check hover state
         if white_button.collidepoint(mouse_pos):
             button_hover = "white"
         elif black_button.collidepoint(mouse_pos):
             button_hover = "black"
+        elif quit_button.collidepoint(mouse_pos):
+            button_hover = "quit"
 
         # Draw white button with glow effect if hovered
         if button_hover == "white":
@@ -203,15 +208,27 @@ class ChessBoard:
         pygame.draw.rect(self.screen, BLACK, black_button, border_radius=15)
         pygame.draw.rect(self.screen, GOLD if button_hover == "black" else WOOD_DARK, black_button, 4, border_radius=15)
 
+        # Draw quit button with glow effect if hovered
+        if button_hover == "quit":
+            pygame.draw.rect(self.screen, LIGHT_BLUE, quit_button.inflate(10, 10), border_radius=10)
+        pygame.draw.rect(self.screen, DARK_RED, quit_button, border_radius=10)
+        pygame.draw.rect(self.screen, GOLD if button_hover == "quit" else WOOD_DARK, quit_button, 3, border_radius=10)
+
         # Button text
         white_text = self.medium_font.render("Play as White", True, 'black')
         black_text = self.medium_font.render("Play as Black", True, 'white')
 
+        # Using smaller font for Quit button
+        quit_font = pygame.font.Font('freesansbold.ttf', 24)
+        quit_text = quit_font.render("Quit", True, 'white')
+
         white_text_rect = white_text.get_rect(center=white_button.center)
         black_text_rect = black_text.get_rect(center=black_button.center)
+        quit_text_rect = quit_text.get_rect(center=quit_button.center)
 
         self.screen.blit(white_text, white_text_rect)
         self.screen.blit(black_text, black_text_rect)
+        self.screen.blit(quit_text, quit_text_rect)
 
         # Add game instructions at bottom
         instruction_font = pygame.font.Font('freesansbold.ttf', 18)
@@ -219,9 +236,9 @@ class ChessBoard:
         inst_text = instruction_font.render(instructions, True, LIGHT_GRAY)
         self.screen.blit(inst_text, (WIDTH // 2 - inst_text.get_width() // 2, HEIGHT - 50))
 
-        return white_button, black_button
+        return white_button, black_button, quit_button
 
-    def draw_status_area(self, turn_step):
+    def draw_status_area(self, turn_step, white_time=0, black_time=0):
         # Create a modern status panel at the bottom
         status_rect = pygame.Rect(0, 800, WIDTH, 100)
         pygame.draw.rect(self.screen, WOOD_BROWN, status_rect)
@@ -237,18 +254,45 @@ class ChessBoard:
         turn_text = "White's Turn" if turn_step < 2 else "Black's Turn"
 
         # Draw whose turn indicator with color-coded box
-        turn_rect = pygame.Rect(30, 820, 300, 60)
+        turn_rect = pygame.Rect(30, 820, 180, 60)
         indicator_color = WHITE if turn_step < 2 else BLACK
         pygame.draw.rect(self.screen, indicator_color, turn_rect, border_radius=10)
         pygame.draw.rect(self.screen, GOLD, turn_rect, 3, border_radius=10)
 
-        turn_font = pygame.font.Font('freesansbold.ttf', 36)
+        turn_font = pygame.font.Font('freesansbold.ttf', 32)
         text_color = BLACK if turn_step < 2 else WHITE
 
         # Center the turn label
         turn_label = turn_font.render(turn_text, True, text_color)
         self.screen.blit(turn_label, (turn_rect.centerx - turn_label.get_width() // 2,
                                       turn_rect.centery - turn_label.get_height() // 2))
+
+        # Display time for both sides
+        time_font = pygame.font.Font('freesansbold.ttf', 32)
+
+        # White time display
+        white_minutes = int(white_time) // 60
+        white_seconds = int(white_time) % 60
+        white_time_text = f"{white_minutes:02d}:{white_seconds:02d}"
+        white_time_label = time_font.render(white_time_text, True, 'black')
+
+        white_time_rect = pygame.Rect(240, 820, 120, 60)
+        pygame.draw.rect(self.screen, WHITE, white_time_rect, border_radius=10)
+        pygame.draw.rect(self.screen, GOLD, white_time_rect, 3, border_radius=10)
+        self.screen.blit(white_time_label, (white_time_rect.centerx - white_time_label.get_width() // 2,
+                                            white_time_rect.centery - white_time_label.get_height() // 2))
+
+        # Black time display
+        black_minutes = int(black_time) // 60
+        black_seconds = int(black_time) % 60
+        black_time_text = f"{black_minutes:02d}:{black_seconds:02d}"
+        black_time_label = time_font.render(black_time_text, True, 'white')
+
+        black_time_rect = pygame.Rect(380, 820, 120, 60)
+        pygame.draw.rect(self.screen, BLACK, black_time_rect, border_radius=10)
+        pygame.draw.rect(self.screen, GOLD, black_time_rect, 3, border_radius=10)
+        self.screen.blit(black_time_label, (black_time_rect.centerx - black_time_label.get_width() // 2,
+                                            black_time_rect.centery - black_time_label.get_height() // 2))
 
         # Create a stylish forfeit button
         forfeit_rect = pygame.Rect(850, 830, 220, 50)
