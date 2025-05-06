@@ -13,22 +13,61 @@ class ChessPiece:
         self.load_image()
 
     def load_image(self):
-        img_name = f"images/{self.color} {self.piece_type}.png"
-        self.image = pygame.image.load(img_name)
-        if self.piece_type == 'pawn':
-            self.image = pygame.transform.scale(self.image, (65, 65))
-        else:
-            self.image = pygame.transform.scale(self.image, (80, 80))
+        # Use color names for image loading regardless of how colors are defined in constants.py
+        color_name = "white" if self.color == WHITE else "black"
 
-        # Create small version for captured pieces
-        self.small_image = pygame.transform.scale(self.image, (45, 45))
+        try:
+            img_name = f"images/{color_name} {self.piece_type}.png"
+            self.image = pygame.image.load(img_name)
+
+            # Size images appropriately for the updated board
+            if self.piece_type == 'pawn':
+                self.image = pygame.transform.scale(self.image, (65, 65))
+            else:
+                self.image = pygame.transform.scale(self.image, (70, 70))
+
+            # Create small version for captured pieces
+            self.small_image = pygame.transform.scale(self.image, (40, 40))
+        except pygame.error as e:
+            print(f"Error loading image: {e}")
+            # Create a placeholder image if the real one can't be loaded
+            self.image = self.create_placeholder_image()
+            self.small_image = pygame.transform.scale(self.image, (40, 40))
+
+    def create_placeholder_image(self):
+        # Create a simple colored rectangle as a placeholder
+        size = 70
+        surface = pygame.Surface((size, size), pygame.SRCALPHA)
+
+        # Fill with color
+        bg_color = CREAM_WHITE if self.color == WHITE else (50, 50, 50)
+        pygame.draw.rect(surface, bg_color, (0, 0, size, size))
+
+        # Draw piece type text
+        font = pygame.font.Font('freesansbold.ttf', 20)
+        text = font.render(self.piece_type[0].upper(), True,
+                           (50, 50, 50) if self.color == WHITE else CREAM_WHITE)
+        text_rect = text.get_rect(center=(size // 2, size // 2))
+        surface.blit(text, text_rect)
+
+        # Draw border
+        pygame.draw.rect(surface, GOLD, (0, 0, size, size), 2)
+
+        return surface
 
     def draw(self, screen):
+        square_size = self.board.square_size
+        start_pos = self.board.start_pos
+
         x, y = self.position
-        if self.piece_type == 'pawn':
-            screen.blit(self.image, (x * 100 + 22, y * 100 + 30))
-        else:
-            screen.blit(self.image, (x * 100 + 10, y * 100 + 10))
+        screen_x = start_pos + x * square_size
+        screen_y = start_pos + y * square_size
+
+        # Center the piece in its square
+        offset_x = (square_size - self.image.get_width()) // 2
+        offset_y = (square_size - self.image.get_height()) // 2
+
+        screen.blit(self.image, (screen_x + offset_x, screen_y + offset_y))
 
     def get_valid_moves(self):
         if self.piece_type == 'pawn':
@@ -70,7 +109,7 @@ class ChessPiece:
             if (x - 1, y + 1) == self.board.get_en_passant_square(BLACK):
                 moves.append((x - 1, y + 1))
         else:
-            # Similar logic for black pawns (reversed direction)
+            # Logic for black pawns (reversed direction)
             # Forward moves
             if (x, y - 1) not in self.board.get_all_piece_positions() and y > 0:
                 moves.append((x, y - 1))
@@ -101,8 +140,8 @@ class ChessPiece:
         directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]
 
         for dx, dy in directions:
-            for i in range(1, 8):
-                new_pos = (x + i * dx, y + i * dy)
+            for dist in range(1, 8):  # Better variable name than 'i'
+                new_pos = (x + dist * dx, y + dist * dy)
                 # Check if position is on the board
                 if not (0 <= new_pos[0] <= 7 and 0 <= new_pos[1] <= 7):
                     break
@@ -149,11 +188,9 @@ class ChessPiece:
         x, y = self.position
 
         # Check in 4 diagonal directions
-        directions = [(1, 1), (1, -1), (-1, 1), (-1, -1)]
-
-        for dx, dy in directions:
-            for i in range(1, 8):
-                new_pos = (x + i * dx, y + i * dy)
+        for dx, dy in [(1, 1), (1, -1), (-1, 1), (-1, -1)]:  # All diagonals
+            for dist in range(1, 8):  # Better variable name than 'i'
+                new_pos = (x + dist * dx, y + dist * dy)
                 # Check if position is on the board
                 if not (0 <= new_pos[0] <= 7 and 0 <= new_pos[1] <= 7):
                     break
@@ -168,6 +205,7 @@ class ChessPiece:
                 if new_pos in self.board.get_opponent_positions(self.color):
                     break
 
+        # NOTE: Could optimize move calculation with bitboards in v2.0
         return moves
 
     def _check_queen_moves(self):
@@ -197,7 +235,7 @@ class ChessPiece:
 
                 moves.append(new_pos)
 
-        # Castling logic will be handled by the board class
+        # Castling logic is handled by the board class
         return moves, castling_moves
 
     def move(self, new_position):
