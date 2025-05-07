@@ -2,6 +2,7 @@
 import pygame
 from chess_game import ChessGame
 
+
 def main():
     # Initialize pygame
     pygame.init()

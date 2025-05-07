@@ -1,4 +1,3 @@
-# chess_game.py
 import pygame
 import math
 import os
@@ -26,10 +25,14 @@ class ChessGame:
         self.black_promote = False
         self.promo_index = 100
         self.board_flipped = False  # False = white at bottom, True = black at bottom
-        self.last_flip_time = 0  # Prevents rapid consecutive button presses
+        self.last_flip_time = 0  # Prevents rapid button presses
 
-        # Add variables for time control
-        self.time_control = BLITZ  # Default value
+        # Player settings
+        self.player_color = WHITE  # Player's color (starts as white)
+        self.computer_plays = False  # No computer player to start with
+
+        # Time control
+        self.time_control = BLITZ  # Default time setting
         self.white_time = 0  # Will be set when time mode is selected
         self.black_time = 0  # Will be set when time mode is selected
         self.last_move_time = 0  # Time of the last move
@@ -37,10 +40,8 @@ class ChessGame:
         # Game state
         self.game_state = MENU  # Start with menu screen
 
-        # FIXME: Need to implement proper AI opponent later
-
     def run(self):
-        game_running = True  # More descriptive than just 'run'
+        game_running = True
         while game_running:
             self.clock.tick(FPS)
 
@@ -50,7 +51,7 @@ class ChessGame:
             else:
                 self.counter = 0
 
-            # Handle game based on current state
+            # Handle game based on state
             if self.game_state == MENU:
                 game_running = self.handle_menu()
             elif self.game_state == TIME_SELECT:
@@ -70,7 +71,7 @@ class ChessGame:
         # Draw side selection menu
         white_button, black_button, quit_button = self.board.draw_menu()
 
-        # Check for mouse clicks on buttons
+        # Check for mouse clicks
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return False
@@ -79,23 +80,23 @@ class ChessGame:
                 mouse_pos = pygame.mouse.get_pos()
 
                 if white_button.collidepoint(mouse_pos):
-                    # Set to play as white
-                    self.board.playing_as_white = True  # Direct assignment instead of method call
-                    # White pieces at bottom (not flipped)
-                    self.board_flipped = False
-                    # Go to time selection screen
+                    # Player chose white
+                    self.player_color = WHITE
+                    self.board.playing_as_white = True
+                    self.board_flipped = False  # White at bottom
+                    self.computer_plays = False
                     self.game_state = TIME_SELECT
 
                 elif black_button.collidepoint(mouse_pos):
-                    # Set to play as black
-                    self.board.playing_as_white = False  # Direct assignment instead of method call
-                    # Black pieces at bottom (flipped)
-                    self.board_flipped = True
-                    # Go to time selection screen
+                    # Player chose black
+                    self.player_color = BLACK
+                    self.board.playing_as_white = False
+                    self.board_flipped = True  # Black at bottom
+                    self.computer_plays = True
                     self.game_state = TIME_SELECT
 
                 elif quit_button.collidepoint(mouse_pos):
-                    # Exit the game
+                    # Exit game
                     return False
 
         return True
@@ -137,11 +138,11 @@ class ChessGame:
             text_rect = button_text.get_rect(center=button.center)
             self.screen.blit(button_text, text_rect)
 
-        # Create a Back button in the bottom left corner
+        # Create Back button
         back_button = pygame.Rect(30, HEIGHT - 80, 120, 50)
         back_hover = back_button.collidepoint(mouse_pos)
 
-        # Draw back button with hover effect
+        # Draw back button
         if back_hover:
             pygame.draw.rect(self.screen, LIGHT_BLUE, back_button.inflate(10, 10), border_radius=10)
         pygame.draw.rect(self.screen, WOOD_DARK, back_button, border_radius=10)
@@ -177,7 +178,7 @@ class ChessGame:
                         self.start_game()
                         break
 
-            # Allow ESC to go back to side selection
+            # Allow ESC to go back to menu
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     self.game_state = MENU
@@ -186,7 +187,7 @@ class ChessGame:
 
     def start_game(self):
         self.game_state = PLAYING
-        # Chess rule: White always moves first
+        # White always goes first in chess
         self.turn_step = 0
         self.selection = 100
         self.valid_moves = []
@@ -200,14 +201,14 @@ class ChessGame:
         self.black_promote = False
         self.promo_index = 100
 
-        # Make sure board setup is consistent with selected side
+        # Setup board
         self.board.setup_board()
 
-        # Record start time
+        # Start the clock
         self.last_move_time = pygame.time.get_ticks()
 
     def update_timers(self):
-        # Reduce time only for the side that's currently playing
+        # Reduce time for current player
         current_time = pygame.time.get_ticks()
         elapsed = (current_time - self.last_move_time) / 1000  # Convert to seconds
 
@@ -277,12 +278,12 @@ class ChessGame:
                         self.handle_promotion_click(event.pos)
 
                 if event.type == pygame.KEYDOWN:
-                    # Handle one-time key presses
+                    # Handle key presses
                     if event.key == pygame.K_r:
-                        # Return to side selection menu
+                        # Return to menu
                         self.game_state = MENU
                     elif event.key == pygame.K_f:
-                        # F key already handled above for continuous presses
+                        # F key already handled above
                         pass
                     elif self.game_over and event.key == pygame.K_RETURN:
                         self.reset_game()
@@ -305,23 +306,23 @@ class ChessGame:
         return True
 
     def handle_mouse_click(self, pos):
-        # Calculate board position from screen coordinates
+        # Calculate board position
         square_size = self.board.square_size
         start_pos = self.board.start_pos
 
-        # Check if click is on the board
+        # Check if click is on board
         if pos[0] >= start_pos and pos[0] < start_pos + square_size * 8 and \
                 pos[1] >= start_pos and pos[1] < start_pos + square_size * 8:
             # Convert screen position to board coordinates
             x_coord = (pos[0] - start_pos) // square_size
             y_coord = (pos[1] - start_pos) // square_size
 
-            # Convert coordinates based on board orientation
+            # Adjust for board flip
             if self.board_flipped:
                 y_coord = 7 - y_coord
         else:
-            # Click is outside the board
-            # Check forfeit button
+            # Click outside board
+            # Check for forfeit button
             forfeit_rect = pygame.Rect(850, 830, 220, 50)
             if forfeit_rect.collidepoint(pos):
                 self.winner = BLACK if self.turn_step <= 1 else WHITE
@@ -330,127 +331,93 @@ class ChessGame:
 
         click_coords = (x_coord, y_coord)
 
-        # Handle white's turn
-        if self.turn_step <= 1:
-            # Select piece
-            if self.turn_step == 0:
-                for i, piece in enumerate(self.board.white_pieces):
-                    if piece.position == click_coords:
-                        self.selection = i
-                        self.turn_step = 1
-                        self.get_valid_moves()
-                        break
+        # Handle move based on player color
+        # If playing as white
+        if self.player_color == WHITE:
+            # When it's white's turn
+            if self.turn_step <= 1:
+                self._handle_player_move(click_coords, WHITE)
+            # When it's black's turn
             else:
-                # Get the selected piece first
-                if self.selection != 100 and 0 <= self.selection < len(self.board.white_pieces):
-                    piece = self.board.white_pieces[self.selection]
-
-                    # Move selected piece
-                    if click_coords in self.valid_moves:
-                        # Verify king won't be in check after move
-                        if self.is_move_safe_for_king(piece, click_coords, WHITE):
-                            self.move_piece(piece, click_coords)
-                            self.turn_step = 2
-                            self.selection = 100
-                            self.valid_moves = []
-                        else:
-                            # Warning: move would put king in check
-                            print("Cannot move: King would be in check")
-
-                    # Handle castling
-                    elif piece.piece_type == 'king':
-                        for king_pos, rook_pos in self.castling_moves:
-                            if click_coords == king_pos:
-                                # Find rook to castle with
-                                if king_pos[0] > piece.position[0]:  # Kingside
-                                    rook = next((p for p in self.board.white_pieces if
-                                                 p.piece_type == 'rook' and p.position[0] > piece.position[0]), None)
-                                else:  # Queenside
-                                    rook = next((p for p in self.board.white_pieces if
-                                                 p.piece_type == 'rook' and p.position[0] < piece.position[0]), None)
-
-                                if rook:
-                                    # Move king to castling position
-                                    piece.move(king_pos)
-                                    # Move rook to castling position
-                                    rook.move(rook_pos)
-
-                                    # Update last move time for timer
-                                    self.last_move_time = pygame.time.get_ticks()
-
-                                self.turn_step = 2
-                                self.selection = 100
-                                self.valid_moves = []
-                                self.castling_moves = []
-
-                # Cancel selection if clicking on another white piece
-                if any(p.position == click_coords for p in self.board.white_pieces):
-                    for i, piece in enumerate(self.board.white_pieces):
-                        if piece.position == click_coords:
-                            self.selection = i
-                            self.get_valid_moves()
-                            break
-
-        # Handle black's turn (similar logic)
+                # Let player control both sides for testing
+                self._handle_player_move(click_coords, BLACK)
+        # If playing as black
         else:
-            # Select piece
-            if self.turn_step == 2:
-                for i, piece in enumerate(self.board.black_pieces):
-                    if piece.position == click_coords:
-                        self.selection = i
-                        self.turn_step = 3
-                        self.get_valid_moves()
-                        break
+            # When it's white's turn
+            if self.turn_step <= 1:
+                # Let player control both sides for testing
+                self._handle_player_move(click_coords, WHITE)
+            # When it's black's turn
             else:
-                # Get the selected piece first
-                if self.selection != 100 and 0 <= self.selection < len(self.board.black_pieces):
-                    piece = self.board.black_pieces[self.selection]
+                self._handle_player_move(click_coords, BLACK)
 
-                    # Move selected piece
-                    if click_coords in self.valid_moves:
-                        # Verify king won't be in check after move
-                        if self.is_move_safe_for_king(piece, click_coords, BLACK):
-                            self.move_piece(piece, click_coords)
-                            self.turn_step = 0
+    def _handle_player_move(self, click_coords, color):
+        """Handle player move for a specific color"""
+        # Select pieces based on color
+        pieces = self.board.white_pieces if color == WHITE else self.board.black_pieces
+        opponent_pieces = self.board.black_pieces if color == WHITE else self.board.white_pieces
+
+        # Selection phase
+        if (self.turn_step == 0 and color == WHITE) or (self.turn_step == 2 and color == BLACK):
+            for i, piece in enumerate(pieces):
+                if piece.position == click_coords:
+                    self.selection = i
+                    self.turn_step += 1  # Move to move phase
+                    self.get_valid_moves()
+                    break
+        # Move phase
+        elif (self.turn_step == 1 and color == WHITE) or (self.turn_step == 3 and color == BLACK):
+            # Check if a piece is selected
+            if self.selection != 100 and 0 <= self.selection < len(pieces):
+                piece = pieces[self.selection]
+
+                # Try to move selected piece
+                if click_coords in self.valid_moves:
+                    # Check if move is safe for king
+                    if self.is_move_safe_for_king(piece, click_coords, color):
+                        self.move_piece(piece, click_coords)
+                        # Switch to other side's turn
+                        self.turn_step = 2 if color == WHITE else 0
+                        self.selection = 100
+                        self.valid_moves = []
+                    else:
+                        print(f"Cannot move: King would be in check")
+
+                # Handle castling
+                elif piece.piece_type == 'king':
+                    for king_pos, rook_pos in self.castling_moves:
+                        if click_coords == king_pos:
+                            # Find the rook for castling
+                            rook = None
+                            if king_pos[0] > piece.position[0]:  # Kingside
+                                rook = next((p for p in pieces if
+                                            p.piece_type == 'rook' and p.position[0] > piece.position[0]), None)
+                            else:  # Queenside
+                                rook = next((p for p in pieces if
+                                            p.piece_type == 'rook' and p.position[0] < piece.position[0]), None)
+
+                            if rook:
+                                # Move king to castling position
+                                piece.move(king_pos)
+                                # Move rook to castling position
+                                rook.move(rook_pos)
+
+                                # Update last move time
+                                self.last_move_time = pygame.time.get_ticks()
+
+                            # Switch to other side's turn
+                            self.turn_step = 2 if color == WHITE else 0
                             self.selection = 100
                             self.valid_moves = []
-                        else:
-                            # Warning: move would put king in check
-                            print("Cannot move: King would be in check")
+                            self.castling_moves = []
 
-                    # Handle castling
-                    elif piece.piece_type == 'king':
-                        for king_pos, rook_pos in self.castling_moves:
-                            if click_coords == king_pos:
-                                # Find rook to castle with
-                                if king_pos[0] > piece.position[0]:  # Kingside
-                                    rook = next((p for p in self.board.black_pieces if
-                                                 p.piece_type == 'rook' and p.position[0] > piece.position[0]), None)
-                                else:  # Queenside
-                                    rook = next((p for p in self.board.black_pieces if
-                                                 p.piece_type == 'rook' and p.position[0] < piece.position[0]), None)
-
-                                if rook:
-                                    # Move king to castling position
-                                    piece.move(king_pos)
-                                    # Move rook to castling position
-                                    rook.move(rook_pos)
-
-                                    # Update last move time for timer
-                                    self.last_move_time = pygame.time.get_ticks()
-
-                                self.turn_step = 0
-                                self.selection = 100
-                                self.valid_moves = []
-                                self.castling_moves = []
-
-                # Cancel selection if clicking on another black piece
-                if any(p.position == click_coords for p in self.board.black_pieces):
-                    for i, piece in enumerate(self.board.black_pieces):
-                        if piece.position == click_coords:
-                            self.selection = i
-                            self.get_valid_moves()
-                            break
+            # Reselect if clicking on own piece
+            if any(p.position == click_coords for p in pieces):
+                for i, piece in enumerate(pieces):
+                    if piece.position == click_coords:
+                        self.selection = i
+                        self.get_valid_moves()
+                        break
 
     def is_move_safe_for_king(self, piece, new_position, color):
         """Check if move keeps king safe from check"""
@@ -490,9 +457,8 @@ class ChessGame:
         self.valid_moves = []
         self.castling_moves = []
 
-        # Fixed index out of range bug
         if self.turn_step <= 1:
-            # Ensure selection is valid before accessing piece
+            # White's turn
             if 0 <= self.selection < len(self.board.white_pieces):
                 piece = self.board.white_pieces[self.selection]
                 all_possible_moves = piece.get_valid_moves()
@@ -502,11 +468,11 @@ class ChessGame:
                     if self.is_move_safe_for_king(piece, move, WHITE):
                         self.valid_moves.append(move)
 
-                # Get castling moves if king is selected
+                # Get castling moves for king
                 if piece.piece_type == 'king':
                     self.castling_moves = self.board.check_castling(piece.color)
         else:
-            # Ensure selection is valid before accessing piece
+            # Black's turn
             if 0 <= self.selection < len(self.board.black_pieces):
                 piece = self.board.black_pieces[self.selection]
                 all_possible_moves = piece.get_valid_moves()
@@ -516,7 +482,7 @@ class ChessGame:
                     if self.is_move_safe_for_king(piece, move, BLACK):
                         self.valid_moves.append(move)
 
-                # Get castling moves if king is selected
+                # Get castling moves for king
                 if piece.piece_type == 'king':
                     self.castling_moves = self.board.check_castling(piece.color)
 
@@ -695,7 +661,7 @@ class ChessGame:
         # Create game over panel
         panel_width, panel_height = 500, 200
         panel_rect = pygame.Rect((WIDTH - panel_width) // 2, (HEIGHT - panel_height) // 2,
-                                 panel_width, panel_height)
+                                panel_width, panel_height)
 
         # Draw panel with winner color accent
         winner_color = WHITE if self.winner == WHITE else BLACK
@@ -710,13 +676,13 @@ class ChessGame:
         # Winner text
         win_text = "White Win" if self.winner == WHITE else "Black Win"
 
-        # Add text indicating win by timeout
+        # Add text for win by timeout
         if self.winner_by_time:
             win_text += " by Timeout"
 
         title = title_font.render(win_text, True, CREAM_WHITE)
 
-        # Message prompting to press Enter to play again
+        # Message for continue
         message = message_font.render("Press Enter to play again", True, CREAM_WHITE)
 
         # Center messages
@@ -726,15 +692,18 @@ class ChessGame:
         self.game_over = True
 
     def reset_game(self):
-        # Reset the game state but keep the same side and time control
+        # Reset game but keep same side and time control
         playing_as_white = self.board.playing_as_white
         current_time_control = self.time_control
+        player_color = self.player_color  # Save player color
 
         self.board = ChessBoard(self.screen)
         self.board.playing_as_white = playing_as_white
+
+        # Setup board
         self.board.setup_board()
 
-        self.turn_step = 0  # White always starts first (chess rules)
+        self.turn_step = 0  # White always starts in chess
         self.selection = 100
         self.valid_moves = []
         self.castling_moves = []
@@ -746,9 +715,10 @@ class ChessGame:
         self.white_promote = False
         self.black_promote = False
         self.promo_index = 100
+        self.player_color = player_color  # Restore player color
 
-        # Set board orientation based on which side is playing
-        self.board_flipped = not playing_as_white
+        # Set board flip based on player color
+        self.board_flipped = (self.player_color == BLACK)  # Flip board when playing as black
 
         # Reset timers
         self.time_control = current_time_control
