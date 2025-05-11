@@ -1,4 +1,3 @@
-# main.py
 import pygame
 from chess_game import ChessGame
 
