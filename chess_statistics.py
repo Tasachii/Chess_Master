@@ -411,14 +411,32 @@ class ChessStatistics:
 
     def _create_duration_histogram(self, games, charts_dir):
         """Create histogram of game durations"""
-        durations = [float(game.get('duration', 0)) / 60 for game in games]  # Convert to minutes
+        # Add try-except to handle invalid duration data
+        durations = []
+        for game in games:
+            try:
+                duration = float(game.get('duration', 0)) / 60  # Convert to minutes
+                durations.append(duration)
+            except (ValueError, TypeError):
+                # Skip invalid duration values
+                continue
 
-        plt.figure(figsize=(12, 8))
-        plt.hist(durations, bins=20, edgecolor='black', alpha=0.7)
-        plt.xlabel('Game Duration (minutes)')
-        plt.ylabel('Frequency')
-        plt.title('Game Duration Distribution')
-        plt.grid(True, alpha=0.3)
+        if not durations:  # Check if we have any valid durations
+            # Create a basic empty chart with a message if no valid data
+            plt.figure(figsize=(12, 8))
+            plt.text(0.5, 0.5, 'No valid duration data available',
+                     horizontalalignment='center', verticalalignment='center',
+                     transform=plt.gca().transAxes, fontsize=14)
+            plt.xlabel('Game Duration (minutes)')
+            plt.ylabel('Frequency')
+            plt.title('Game Duration Distribution')
+        else:
+            plt.figure(figsize=(12, 8))
+            plt.hist(durations, bins=20, edgecolor='black', alpha=0.7)
+            plt.xlabel('Game Duration (minutes)')
+            plt.ylabel('Frequency')
+            plt.title('Game Duration Distribution')
+            plt.grid(True, alpha=0.3)
 
         save_path = charts_dir / f"durations_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
@@ -428,23 +446,57 @@ class ChessStatistics:
         """Create a line chart of move count trends"""
         dates = []
         move_counts = []
+        valid_data_points = 0
 
         for game in games:
-            timestamp = datetime.strptime(game.get('timestamp', ''), '%Y-%m-%d %H:%M:%S')
-            dates.append(timestamp)
-            move_counts.append(int(game.get('total_moves', 0)))
+            try:
+                # Try the expected format first
+                timestamp = datetime.strptime(game.get('timestamp', ''), '%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                try:
+                    # Fall back to the alternative format
+                    timestamp = datetime.strptime(game.get('timestamp', ''), '%Y%m%d_%H%M%S')
+                except ValueError:
+                    # If all else fails, use current time and log a warning
+                    print(f"Warning: Invalid timestamp format: {game.get('timestamp', '')}")
+                    timestamp = datetime.now()
 
-        plt.figure(figsize=(14, 8))
-        plt.plot(dates, move_counts, marker='o', linestyle='-', linewidth=2, markersize=6)
-        plt.xlabel('Date')
-        plt.ylabel('Total Moves')
-        plt.title('Move Count Trends Over Time')
-        plt.grid(True, alpha=0.3)
-        plt.xticks(rotation=45)
+            # Handle possibly invalid total_moves value
+            try:
+                move_count = int(game.get('total_moves', 0))
+                dates.append(timestamp)
+                move_counts.append(move_count)
+                valid_data_points += 1
+            except (ValueError, TypeError):
+                print(f"Warning: Invalid move count: {game.get('total_moves', 'None')} - skipping this entry")
+                continue
 
-        save_path = charts_dir / f"move_trends_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        plt.close()
+        # Only create chart if we have valid data
+        if valid_data_points > 0:
+            plt.figure(figsize=(14, 8))
+            plt.plot(dates, move_counts, marker='o', linestyle='-', linewidth=2, markersize=6)
+            plt.xlabel('Date')
+            plt.ylabel('Total Moves')
+            plt.title('Move Count Trends Over Time')
+            plt.grid(True, alpha=0.3)
+            plt.xticks(rotation=45)
+
+            save_path = charts_dir / f"move_trends_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            plt.close()
+        else:
+            # Create an empty chart with a message if no valid data
+            plt.figure(figsize=(14, 8))
+            plt.text(0.5, 0.5, 'No valid move data available',
+                     horizontalalignment='center', verticalalignment='center',
+                     transform=plt.gca().transAxes, fontsize=14)
+            plt.xlabel('Date')
+            plt.ylabel('Total Moves')
+            plt.title('Move Count Trends Over Time')
+
+            save_path = charts_dir / f"move_trends_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+            plt.close()
 
     def _create_piece_usage_chart(self, games, charts_dir):
         """Create bar chart of piece usage"""

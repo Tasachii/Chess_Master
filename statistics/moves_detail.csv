@@ -1,0 +1,1 @@
+game_id,move_number,piece_type,color,from_pos,to_pos,move_time,is_capture,is_check,is_castle,is_en_passant,is_promotion
