@@ -40,6 +40,7 @@ PROMOTION_PIECES = ['bishop', 'knight', 'rook', 'queen']
 MENU = 0
 PLAYING = 1
 TIME_SELECT = 2
+CHART_VIEWER = 6  # game state for viewing charts
 
 # Time controls
 BULLET = 0  # 1 min
