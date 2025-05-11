@@ -17,8 +17,8 @@ The concept behind Chess Master is to provide an engaging chess experience that 
 - Captured pieces display
 
 ## UML Class Diagram
+![UML Class Diagram](./screenshots/chess_master_uml.png)
 
-![Screenshot 2568-05-11 at 23.53.44.png](..%2F..%2F..%2F..%2F..%2Fvar%2Ffolders%2Fhy%2Fdnw3yd5d52x2rkp8s9rh5r5r0000gn%2FT%2FTemporaryItems%2FNSIRD_screencaptureui_hcuBLp%2FScreenshot%202568-05-11%20at%2023.53.44.png)
 ## Data Component
 The data component of Chess Master includes comprehensive game statistics tracking and visualization:
 - Win rates and game duration analysis
