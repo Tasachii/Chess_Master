@@ -28,6 +28,10 @@ LIGHT_BLUE = (173, 216, 230)
 LIGHT_BLUE_HIGHLIGHT = (193, 226, 240)
 DARK_BLUE = 'dark blue'
 
+# Add missing colors
+PURPLE = (128, 0, 128)
+ORANGE = (255, 165, 0)
+
 # Piece types
 PIECE_TYPES = ['pawn', 'queen', 'king', 'knight', 'rook', 'bishop']
 PROMOTION_PIECES = ['bishop', 'knight', 'rook', 'queen']
