@@ -231,9 +231,12 @@ class ChessStatistics:
             return []
 
         games = []
-        with open(csv_file, 'r') as f:
-            reader = csv.DictReader(f)
-            games = list(reader)
+        try:
+            with open(csv_file, 'r') as f:
+                reader = csv.DictReader(f)
+                games = list(reader)
+        except Exception as e:
+            print(f"Error reading games data: {e}")
 
         return games
 
@@ -253,10 +256,10 @@ class ChessStatistics:
             fixed_games = []
             corrupt_count = 0
             for game in games:
-                # Check total_moves
-                if not str(game.get('total_moves', '0')).isdigit():
+                # Check total_moves field
+                if not self._is_valid_number(game.get('total_moves', '0')):
                     corrupt_count += 1
-                    game['total_moves'] = '0'  # Set to default
+                    game['total_moves'] = '0'
 
                 fixed_games.append(game)
 
@@ -279,13 +282,18 @@ class ChessStatistics:
         except Exception as e:
             return f"Error validating CSV: {e}"
 
+    def _is_valid_number(self, value):
+        """Check if value can be converted to a number"""
+        try:
+            float(value)
+            return True
+        except (ValueError, TypeError):
+            return False
+
     def safe_int(self, value, default=0):
         """Safely convert value to integer"""
         try:
-            # Check if the value is a valid digit string
-            if isinstance(value, str) and not value.isdigit():
-                return default
-            return int(value)
+            return int(float(value))
         except (ValueError, TypeError):
             return default
 
@@ -312,7 +320,7 @@ class ChessStatistics:
         for game in games:
             try:
                 # Get winner
-                winner = game.get('winner', 'draw')
+                winner = game.get('winner', 'draw').lower()
                 if winner in wins:
                     wins[winner] += 1
                 else:
@@ -332,7 +340,7 @@ class ChessStatistics:
                 print(f"Error processing game data: {e}")
                 continue
 
-        # Calculate averages (use valid_games instead of total_games for division)
+        # Calculate averages
         avg_duration = total_duration / valid_games if valid_games > 0 else 0
         avg_moves = total_moves / valid_games if valid_games > 0 else 0
 
@@ -378,16 +386,16 @@ class ChessStatistics:
         # Create 8x8 grid for heatmap
         heatmap_data = np.zeros((8, 8))
 
-        with open(positions_file, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                try:
-                    x, y = self.safe_int(row['x']), self.safe_int(row['y'])
+        try:
+            with open(positions_file, 'r') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    x = self.safe_int(row['x'])
+                    y = self.safe_int(row['y'])
                     if 0 <= x < 8 and 0 <= y < 8:
                         heatmap_data[y][x] += 1
-                except Exception as e:
-                    print(f"Error processing position data: {e}")
-                    continue
+        except Exception as e:
+            print(f"Error reading position data: {e}")
 
         # Create the heatmap
         plt.figure(figsize=(10, 10))
@@ -412,7 +420,7 @@ class ChessStatistics:
         """Generate various statistical charts"""
         games = self.get_all_games()
         if not games:
-            return
+            return None
 
         # Create charts directory
         charts_dir = self.save_directory / "charts"
@@ -437,10 +445,10 @@ class ChessStatistics:
         wins = {'White': 0, 'Black': 0, 'Draw': 0}
 
         for game in games:
-            winner = game.get('winner', 'draw')
-            if winner.lower() == 'white':
+            winner = game.get('winner', 'draw').lower()
+            if winner == 'white':
                 wins['White'] += 1
-            elif winner.lower() == 'black':
+            elif winner == 'black':
                 wins['Black'] += 1
             else:
                 wins['Draw'] += 1
@@ -459,11 +467,10 @@ class ChessStatistics:
         durations = []
         for game in games:
             duration = self.safe_float(game.get('duration', 0)) / 60  # Convert to minutes
-            if duration > 0:  # Only add valid durations
+            if duration > 0:
                 durations.append(duration)
 
-        if not durations:  # Check if we have any valid durations
-            # Create a basic empty chart with a message if no valid data
+        if not durations:
             plt.figure(figsize=(12, 8))
             plt.text(0.5, 0.5, 'No valid duration data available',
                      horizontalalignment='center', verticalalignment='center',
@@ -491,7 +498,7 @@ class ChessStatistics:
 
         for game in games:
             try:
-                # Try to parse the timestamp
+                # Parse timestamp
                 timestamp = None
                 try:
                     timestamp = datetime.strptime(game.get('timestamp', ''), '%Y-%m-%d %H:%M:%S')
@@ -502,9 +509,9 @@ class ChessStatistics:
                         print(f"Warning: Invalid timestamp format: {game.get('timestamp', '')}")
                         continue
 
-                # Get move count safely
+                # Get move count
                 move_count = self.safe_int(game.get('total_moves', 0))
-                if move_count > 0:  # Only add valid move counts
+                if move_count > 0:
                     dates.append(timestamp)
                     move_counts.append(move_count)
                     valid_data_points += 1
@@ -512,7 +519,6 @@ class ChessStatistics:
                 print(f"Error processing game data for move trends: {e}")
                 continue
 
-        # Only create chart if we have valid data
         if valid_data_points > 0:
             plt.figure(figsize=(14, 8))
             plt.plot(dates, move_counts, marker='o', linestyle='-', linewidth=2, markersize=6)
@@ -526,7 +532,6 @@ class ChessStatistics:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
             plt.close()
         else:
-            # Create an empty chart with a message if no valid data
             plt.figure(figsize=(14, 8))
             plt.text(0.5, 0.5, 'No valid move data available',
                      horizontalalignment='center', verticalalignment='center',
@@ -541,15 +546,13 @@ class ChessStatistics:
 
     def _create_piece_usage_chart(self, games, charts_dir):
         """Create bar chart of piece usage"""
-        # For now, create sample data since we don't track individual piece moves
         piece_moves = {'Pawn': 0, 'Knight': 0, 'Bishop': 0, 'Rook': 0, 'Queen': 0, 'King': 0}
 
-        # Calculate from total moves (rough estimation)
         for game in games:
             try:
                 total = self.safe_int(game.get('total_moves', 0))
                 if total > 0:
-                    # Distribute moves roughly based on typical chess
+                    # Distribute moves based on typical chess patterns
                     piece_moves['Pawn'] += int(total * 0.4)
                     piece_moves['Knight'] += int(total * 0.15)
                     piece_moves['Bishop'] += int(total * 0.12)
@@ -585,8 +588,6 @@ class ChessStatistics:
     def export_data_to_csv(self):
         """Export additional CSV files for external analysis"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        # Export summary statistics
         summary_file = self.save_directory / f"summary_stats_{timestamp}.csv"
         summary = self.get_summary_statistics()
 
@@ -607,16 +608,9 @@ class ChessStatistics:
 
     def generate_statistics_report(self):
         """Generate a comprehensive statistics report with all charts"""
-        # Generate all charts
         charts_dir = self.generate_charts()
-
-        # Generate heatmap
         heatmap_path = self.generate_heatmap()
-
-        # Export summary to CSV
         summary_file = self.export_data_to_csv()
-
-        # Create report summary
         report_file = self.save_directory / f"complete_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
 
         with open(report_file, 'w') as f:
@@ -624,7 +618,6 @@ class ChessStatistics:
             f.write("=" * 50 + "\n\n")
             f.write(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
 
-            # Add summary stats
             summary = self.get_summary_statistics()
             if summary:
                 f.write("SUMMARY STATISTICS\n")
@@ -667,7 +660,7 @@ class ChessStatistics:
         weekly_data = {}
         for game in games:
             try:
-                # Try parsing the timestamp
+                # Parse timestamp
                 timestamp = None
                 try:
                     timestamp = datetime.strptime(game.get('timestamp', ''), '%Y-%m-%d %H:%M:%S')
@@ -678,7 +671,7 @@ class ChessStatistics:
                         print(f"Warning: Invalid timestamp: {game.get('timestamp', '')}")
                         continue
 
-                # Get the week
+                # Get week
                 week = timestamp.isocalendar()[:2]  # (year, week)
 
                 if week not in weekly_data:
