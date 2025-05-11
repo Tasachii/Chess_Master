@@ -159,13 +159,10 @@ class ChessStatistics:
     def end_game(self, winner, white_time=0, black_time=0):
         """Finalize game data and save to CSV"""
         self.game_data['winner'] = winner
-        self.game_data['duration'] = (datetime.now() - self.game_data['start_time']).total_seconds()
+        if self.game_data['start_time']:
+            self.game_data['duration'] = (datetime.now() - self.game_data['start_time']).total_seconds()
         self.game_data['white_time_used'] = white_time
         self.game_data['black_time_used'] = black_time
-
-        # Calculate additional stats
-        white_captures = sum(1 for cap in self.game_data['captures'] if cap['captured_by'] == 'white')
-        black_captures = sum(1 for cap in self.game_data['captures'] if cap['captured_by'] == 'black')
 
         # Save to CSV
         self._save_game_to_csv()
@@ -223,7 +220,7 @@ class ChessStatistics:
                         'move_number': i + 1,
                         'x': pos[0],
                         'y': pos[1],
-                        'piece_type': 'unknown',  # Could be enhanced to track piece type
+                        'piece_type': 'unknown',
                         'color': 'unknown'
                     })
 
@@ -239,6 +236,65 @@ class ChessStatistics:
             games = list(reader)
 
         return games
+
+    def validate_csv(self):
+        """Validate and repair CSV data if necessary"""
+        csv_file = self.save_directory / "games_history.csv"
+        if not csv_file.exists():
+            return "CSV file not found"
+
+        try:
+            # Read current data
+            with open(csv_file, 'r', newline='') as f:
+                reader = csv.DictReader(f)
+                games = list(reader)
+
+            # Validate and repair data
+            fixed_games = []
+            corrupt_count = 0
+            for game in games:
+                # Check total_moves
+                if not str(game.get('total_moves', '0')).isdigit():
+                    corrupt_count += 1
+                    game['total_moves'] = '0'  # Set to default
+
+                fixed_games.append(game)
+
+            # Save repaired data (if any)
+            if corrupt_count > 0:
+                # Backup original file
+                backup_path = csv_file.with_suffix('.bak')
+                os.rename(csv_file, backup_path)
+
+                # Write new file
+                with open(csv_file, 'w', newline='') as f:
+                    writer = csv.DictWriter(f, fieldnames=fixed_games[0].keys())
+                    writer.writeheader()
+                    writer.writerows(fixed_games)
+
+                return f"Repaired {corrupt_count} entries. Original file backed up to {backup_path}"
+
+            return "CSV data is valid, no errors found"
+
+        except Exception as e:
+            return f"Error validating CSV: {e}"
+
+    def safe_int(self, value, default=0):
+        """Safely convert value to integer"""
+        try:
+            # Check if the value is a valid digit string
+            if isinstance(value, str) and not value.isdigit():
+                return default
+            return int(value)
+        except (ValueError, TypeError):
+            return default
+
+    def safe_float(self, value, default=0.0):
+        """Safely convert value to float"""
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return default
 
     def get_summary_statistics(self):
         """Get comprehensive summary statistics"""
@@ -263,23 +319,12 @@ class ChessStatistics:
                     wins['draw'] += 1
 
                 # Parse duration safely
-                duration_str = game.get('duration', '0')
-                try:
-                    duration = float(duration_str)
-                    total_duration += duration
-                except (ValueError, TypeError):
-                    # Skip invalid duration data
-                    print(f"Warning: Invalid duration data: {duration_str}")
-                    continue
+                duration = self.safe_float(game.get('duration', 0))
+                total_duration += duration
 
                 # Parse moves safely
-                moves_str = game.get('total_moves', '0')
-                try:
-                    moves = int(moves_str)
-                    total_moves += moves
-                except (ValueError, TypeError):
-                    print(f"Warning: Invalid moves data: {moves_str}")
-                    continue
+                moves = self.safe_int(game.get('total_moves', 0))
+                total_moves += moves
 
                 valid_games += 1
 
@@ -301,13 +346,9 @@ class ChessStatistics:
         avg_move_time = 0
         move_time_count = 0
         for game in games:
-            try:
-                move_time_str = game.get('avg_move_time', '0')
-                move_time = float(move_time_str)
-                avg_move_time += move_time
-                move_time_count += 1
-            except (ValueError, TypeError):
-                continue
+            move_time = self.safe_float(game.get('avg_move_time', 0))
+            avg_move_time += move_time
+            move_time_count += 1
 
         avg_move_time = avg_move_time / move_time_count if move_time_count > 0 else 0
 
@@ -340,9 +381,13 @@ class ChessStatistics:
         with open(positions_file, 'r') as f:
             reader = csv.DictReader(f)
             for row in reader:
-                x, y = int(row['x']), int(row['y'])
-                if 0 <= x < 8 and 0 <= y < 8:
-                    heatmap_data[y][x] += 1
+                try:
+                    x, y = self.safe_int(row['x']), self.safe_int(row['y'])
+                    if 0 <= x < 8 and 0 <= y < 8:
+                        heatmap_data[y][x] += 1
+                except Exception as e:
+                    print(f"Error processing position data: {e}")
+                    continue
 
         # Create the heatmap
         plt.figure(figsize=(10, 10))
@@ -411,15 +456,11 @@ class ChessStatistics:
 
     def _create_duration_histogram(self, games, charts_dir):
         """Create histogram of game durations"""
-        # Add try-except to handle invalid duration data
         durations = []
         for game in games:
-            try:
-                duration = float(game.get('duration', 0)) / 60  # Convert to minutes
+            duration = self.safe_float(game.get('duration', 0)) / 60  # Convert to minutes
+            if duration > 0:  # Only add valid durations
                 durations.append(duration)
-            except (ValueError, TypeError):
-                # Skip invalid duration values
-                continue
 
         if not durations:  # Check if we have any valid durations
             # Create a basic empty chart with a message if no valid data
@@ -432,7 +473,7 @@ class ChessStatistics:
             plt.title('Game Duration Distribution')
         else:
             plt.figure(figsize=(12, 8))
-            plt.hist(durations, bins=20, edgecolor='black', alpha=0.7)
+            plt.hist(durations, bins=min(20, len(durations)), edgecolor='black', alpha=0.7)
             plt.xlabel('Game Duration (minutes)')
             plt.ylabel('Frequency')
             plt.title('Game Duration Distribution')
@@ -450,25 +491,25 @@ class ChessStatistics:
 
         for game in games:
             try:
-                # Try the expected format first
-                timestamp = datetime.strptime(game.get('timestamp', ''), '%Y-%m-%d %H:%M:%S')
-            except ValueError:
+                # Try to parse the timestamp
+                timestamp = None
                 try:
-                    # Fall back to the alternative format
-                    timestamp = datetime.strptime(game.get('timestamp', ''), '%Y%m%d_%H%M%S')
+                    timestamp = datetime.strptime(game.get('timestamp', ''), '%Y-%m-%d %H:%M:%S')
                 except ValueError:
-                    # If all else fails, use current time and log a warning
-                    print(f"Warning: Invalid timestamp format: {game.get('timestamp', '')}")
-                    timestamp = datetime.now()
+                    try:
+                        timestamp = datetime.strptime(game.get('timestamp', ''), '%Y%m%d_%H%M%S')
+                    except ValueError:
+                        print(f"Warning: Invalid timestamp format: {game.get('timestamp', '')}")
+                        continue
 
-            # Handle possibly invalid total_moves value
-            try:
-                move_count = int(game.get('total_moves', 0))
-                dates.append(timestamp)
-                move_counts.append(move_count)
-                valid_data_points += 1
-            except (ValueError, TypeError):
-                print(f"Warning: Invalid move count: {game.get('total_moves', 'None')} - skipping this entry")
+                # Get move count safely
+                move_count = self.safe_int(game.get('total_moves', 0))
+                if move_count > 0:  # Only add valid move counts
+                    dates.append(timestamp)
+                    move_counts.append(move_count)
+                    valid_data_points += 1
+            except Exception as e:
+                print(f"Error processing game data for move trends: {e}")
                 continue
 
         # Only create chart if we have valid data
@@ -505,14 +546,19 @@ class ChessStatistics:
 
         # Calculate from total moves (rough estimation)
         for game in games:
-            total = int(game.get('total_moves', 0))
-            # Distribute moves roughly based on typical chess
-            piece_moves['Pawn'] += int(total * 0.4)
-            piece_moves['Knight'] += int(total * 0.15)
-            piece_moves['Bishop'] += int(total * 0.12)
-            piece_moves['Rook'] += int(total * 0.15)
-            piece_moves['Queen'] += int(total * 0.10)
-            piece_moves['King'] += int(total * 0.08)
+            try:
+                total = self.safe_int(game.get('total_moves', 0))
+                if total > 0:
+                    # Distribute moves roughly based on typical chess
+                    piece_moves['Pawn'] += int(total * 0.4)
+                    piece_moves['Knight'] += int(total * 0.15)
+                    piece_moves['Bishop'] += int(total * 0.12)
+                    piece_moves['Rook'] += int(total * 0.15)
+                    piece_moves['Queen'] += int(total * 0.10)
+                    piece_moves['King'] += int(total * 0.08)
+            except Exception as e:
+                print(f"Error processing game data for piece usage: {e}")
+                continue
 
         plt.figure(figsize=(12, 8))
         pieces = list(piece_moves.keys())
@@ -620,41 +666,63 @@ class ChessStatistics:
         # Group games by week
         weekly_data = {}
         for game in games:
-            timestamp = datetime.strptime(game.get('timestamp', ''), '%Y-%m-%d %H:%M:%S')
-            week = timestamp.isocalendar()[:2]  # (year, week)
+            try:
+                # Try parsing the timestamp
+                timestamp = None
+                try:
+                    timestamp = datetime.strptime(game.get('timestamp', ''), '%Y-%m-%d %H:%M:%S')
+                except ValueError:
+                    try:
+                        timestamp = datetime.strptime(game.get('timestamp', ''), '%Y%m%d_%H%M%S')
+                    except ValueError:
+                        print(f"Warning: Invalid timestamp: {game.get('timestamp', '')}")
+                        continue
 
-            if week not in weekly_data:
-                weekly_data[week] = {'games': [], 'wins': 0}
+                # Get the week
+                week = timestamp.isocalendar()[:2]  # (year, week)
 
-            weekly_data[week]['games'].append(game)
+                if week not in weekly_data:
+                    weekly_data[week] = {'games': [], 'wins': 0}
 
-            # Count wins for specified color
-            winner = game.get('winner', '').lower()
-            if color and winner == color:
-                weekly_data[week]['wins'] += 1
-            elif not color and winner in ['white', 'black']:
-                weekly_data[week]['wins'] += 1
+                weekly_data[week]['games'].append(game)
+
+                # Count wins for specified color
+                winner = game.get('winner', '').lower()
+                if color and winner == color:
+                    weekly_data[week]['wins'] += 1
+                elif not color and winner in ['white', 'black']:
+                    weekly_data[week]['wins'] += 1
+            except Exception as e:
+                print(f"Error processing game for performance trend: {e}")
+                continue
 
         # Calculate weekly metrics
         for week, data in sorted(weekly_data.items()):
             if not data['games']:
                 continue
 
-            week_date = datetime.fromisocalendar(week[0], week[1], 1)
-            dates.append(week_date)
+            try:
+                # Create date for this week
+                week_date = datetime.fromisocalendar(week[0], week[1], 1)
+                dates.append(week_date)
 
-            # Win rate
-            total_games = len(data['games'])
-            win_rate = (data['wins'] / total_games * 100) if total_games > 0 else 0
-            win_rates.append(win_rate)
+                # Win rate
+                total_games = len(data['games'])
+                win_rate = (data['wins'] / total_games * 100) if total_games > 0 else 0
+                win_rates.append(win_rate)
 
-            # Average moves
-            avg_move = sum(int(g.get('total_moves', 0)) for g in data['games']) / total_games
-            avg_moves.append(avg_move)
+                # Average moves
+                total_moves = sum(self.safe_int(g.get('total_moves', 0)) for g in data['games'])
+                avg_move = total_moves / total_games if total_games > 0 else 0
+                avg_moves.append(avg_move)
 
-            # Average duration
-            avg_dur = sum(float(g.get('duration', 0)) for g in data['games']) / total_games / 60
-            avg_duration.append(avg_dur)
+                # Average duration
+                total_duration = sum(self.safe_float(g.get('duration', 0)) for g in data['games'])
+                avg_dur = total_duration / total_games / 60 if total_games > 0 else 0
+                avg_duration.append(avg_dur)
+            except Exception as e:
+                print(f"Error calculating weekly metrics: {e}")
+                continue
 
         return {
             'dates': dates,
