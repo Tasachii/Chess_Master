@@ -88,6 +88,8 @@ class ChessGame:
                 game_running = self.handle_history_view()
             elif self.game_state == self.CHARTS:
                 game_running = self.handle_charts_view()
+            elif self.game_state == CHART_VIEWER:
+                game_running = self.handle_chart_viewer()
 
             pygame.display.flip()
 
@@ -295,12 +297,13 @@ class ChessGame:
                 duration_text = f"{duration / 60:.1f}min"
             except (ValueError, TypeError):
                 duration_text = "??min"
+                duration = 0  # Set default value when an error occurs
 
             moves = game.get('total_moves', 0)
             timestamp = game.get('timestamp', 'Unknown')
 
             # format text
-            game_text = f"Game {len(games) - i}: {winner_text} in {duration / 60:.1f}min ({moves} moves)"
+            game_text = f"Game {len(games) - i}: {winner_text} in {duration_text} ({moves} moves)"
 
             # highlight selected game
             if i == self.selected_game_index:
@@ -515,6 +518,8 @@ class ChessGame:
             charts_dir = self.stats.generate_charts()
             self.stats.generate_heatmap()
             print(f"Charts generated in {charts_dir}")
+            self.game_state = CHART_VIEWER
+            self.current_chart_index = a = 0
 
         # check game selection in overview
         if self.history_view == 'overview':
@@ -529,19 +534,235 @@ class ChessGame:
                         self.selected_game_index = len(games) - 1 - game_index
                         self.history_view = 'detailed'
 
-        # check chart generation button in statistical analysis
+        # Check for chart option clicks in charts view
         if self.history_view == 'charts':
-            generate_btn = pygame.Rect(100, 640, 500, 50)
+            analysis_panel = pygame.Rect(50, 160, WIDTH - 100, 600)
+
+            option_height = 50
+            option_width = 500
+            start_y = 80
+
+            for i, (option, description) in enumerate([
+                ("Win Rate Analysis", "View win/loss/draw distribution"),
+                ("Game Duration Trends", "See how game length changes over time"),
+                ("Piece Usage Patterns", "Analyze most used pieces"),
+                ("Position Heatmap", "See where pieces move most often"),
+                ("Performance Trends", "Track improvement over time"),
+                ("Opening Analysis", "Most played opening moves")
+            ]):
+                option_y = analysis_panel.y + start_y + i * (option_height + 15)
+                option_rect = pygame.Rect(analysis_panel.x + 50, option_y, option_width, option_height)
+
+                if option_rect.collidepoint(mouse_pos):
+                    # If option clicked, find matching chart
+                    chart_types = {
+                        "Win Rate Analysis": "win_rate",
+                        "Game Duration Trends": "durations",
+                        "Piece Usage Patterns": "piece_usage",
+                        "Position Heatmap": "heatmap",
+                        "Performance Trends": "move_trends",
+                        "Opening Analysis": "opening_analysis"
+                    }
+
+                    chart_keyword = chart_types.get(option, "")
+                    if chart_keyword:
+                        # Generate charts if they don't exist yet
+                        charts_dir = self.stats.save_directory / "charts"
+                        if not charts_dir.exists():
+                            self.stats.generate_charts()
+
+                        # Look for matching chart
+                        charts = list(charts_dir.glob(f"*{chart_keyword}*.png"))
+                        if charts:
+                            self.game_state = CHART_VIEWER
+                            # Find the chart's index in the list of all charts
+                            all_charts = list(charts_dir.glob("*.png"))
+                            try:
+                                self.current_chart_index = all_charts.index(charts[0])
+                            except:
+                                self.current_chart_index = 0
+                        else:
+                            # If no matching chart, generate and show all charts
+                            self.stats.generate_charts()
+                            self.game_state = CHART_VIEWER
+                            self.current_chart_index = 0
+
+            # Generate all charts button
+            generate_btn = pygame.Rect(analysis_panel.x + 50, analysis_panel.y + 480, 500, 50)
             if generate_btn.collidepoint(mouse_pos):
-                # generate all charts
+                # Generate all charts and report
                 report_file = self.stats.generate_statistics_report()
                 print(f"Complete report generated: {report_file}")
+                self.game_state = CHART_VIEWER
+                self.current_chart_index = 0
 
     def handle_charts_view(self):
         """Handle viewing generated charts"""
         # redirect to history with charts tab
         self.history_view = 'charts'
         return self.handle_history_view()
+
+    def show_chart_viewer(self):
+        """Display a chart viewer screen showing all available charts"""
+        self.screen.fill(DARK_GRAY)
+
+        # Header
+        header = self.big_font.render("Statistical Charts", True, GOLD)
+        header_rect = header.get_rect(center=(WIDTH // 2, 50))
+        self.screen.blit(header, header_rect)
+
+        # Find all chart files
+        charts_dir = self.stats.save_directory / "charts"
+        if not charts_dir.exists():
+            # No charts available yet
+            no_data_text = self.font.render("No charts available. Generate charts first.", True, CREAM_WHITE)
+            no_data_rect = no_data_text.get_rect(center=(WIDTH // 2, HEIGHT // 2))
+            self.screen.blit(no_data_text, no_data_rect)
+
+            # Back button
+            back_btn = pygame.Rect(30, HEIGHT - 80, 120, 50)
+            pygame.draw.rect(self.screen, WOOD_DARK, back_btn, border_radius=10)
+            pygame.draw.rect(self.screen, GOLD, back_btn, 3, border_radius=10)
+            back_text = self.font.render("Back", True, CREAM_WHITE)
+            back_text_rect = back_text.get_rect(center=back_btn.center)
+            self.screen.blit(back_text, back_text_rect)
+
+            return back_btn, None
+
+        # Load and display the currently selected chart
+        if not hasattr(self, 'current_chart_index'):
+            self.current_chart_index = 0
+
+        # Get list of chart files
+        chart_files = [f for f in charts_dir.glob("*.png")]
+        if not chart_files:
+            no_data_text = self.font.render("No charts available. Generate charts first.", True, CREAM_WHITE)
+            no_data_rect = no_data_text.get_rect(center=(WIDTH // 2, HEIGHT // 2))
+            self.screen.blit(no_data_text, no_data_rect)
+
+            # Back button
+            back_btn = pygame.Rect(30, HEIGHT - 80, 120, 50)
+            pygame.draw.rect(self.screen, WOOD_DARK, back_btn, border_radius=10)
+            pygame.draw.rect(self.screen, GOLD, back_btn, 3, border_radius=10)
+            back_text = self.font.render("Back", True, CREAM_WHITE)
+            back_text_rect = back_text.get_rect(center=back_btn.center)
+            self.screen.blit(back_text, back_text_rect)
+
+            return back_btn, None
+
+        # Ensure index is valid
+        if self.current_chart_index >= len(chart_files):
+            self.current_chart_index = 0
+
+        current_chart = chart_files[self.current_chart_index]
+
+        try:
+            # Load and display the chart
+            chart_img = pygame.image.load(str(current_chart))
+
+            # Scale image to fit without distortion
+            img_rect = chart_img.get_rect()
+            scale_factor = min(700 / img_rect.width, 500 / img_rect.height)
+            new_width = int(img_rect.width * scale_factor)
+            new_height = int(img_rect.height * scale_factor)
+            chart_img = pygame.transform.scale(chart_img, (new_width, new_height))
+
+            # Display chart in center area
+            img_rect = chart_img.get_rect(center=(WIDTH // 2, HEIGHT // 2))
+            self.screen.blit(chart_img, img_rect)
+
+            # Chart title - remove file extension and replace underscores with spaces
+            chart_name = current_chart.stem.replace('_', ' ').title()
+            title = self.font.render(chart_name, True, CREAM_WHITE)
+            self.screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 110))
+
+            # Navigation buttons
+            prev_btn = pygame.Rect(100, HEIGHT - 100, 150, 50)
+            next_btn = pygame.Rect(WIDTH - 250, HEIGHT - 100, 150, 50)
+
+            pygame.draw.rect(self.screen, BLUE, prev_btn, border_radius=10)
+            pygame.draw.rect(self.screen, GOLD, prev_btn, 3, border_radius=10)
+            prev_text = self.font.render("Previous", True, CREAM_WHITE)
+            prev_text_rect = prev_text.get_rect(center=prev_btn.center)
+            self.screen.blit(prev_text, prev_text_rect)
+
+            pygame.draw.rect(self.screen, BLUE, next_btn, border_radius=10)
+            pygame.draw.rect(self.screen, GOLD, next_btn, 3, border_radius=10)
+            next_text = self.font.render("Next", True, CREAM_WHITE)
+            next_text_rect = next_text.get_rect(center=next_btn.center)
+            self.screen.blit(next_text, next_text_rect)
+
+            # Back button
+            back_btn = pygame.Rect(30, HEIGHT - 100, 50, 50)
+            pygame.draw.rect(self.screen, WOOD_DARK, back_btn, border_radius=10)
+            pygame.draw.rect(self.screen, GOLD, back_btn, 3, border_radius=10)
+            back_text = self.font.render("←", True, CREAM_WHITE)
+            back_text_rect = back_text.get_rect(center=back_btn.center)
+            self.screen.blit(back_text, back_text_rect)
+
+            # Chart count indicator
+            count_text = self.font.render(f"Chart {self.current_chart_index + 1} of {len(chart_files)}",
+                                          True, CREAM_WHITE)
+            self.screen.blit(count_text, (WIDTH // 2 - count_text.get_width() // 2, HEIGHT - 100))
+
+            return back_btn, (prev_btn, next_btn)
+
+        except Exception as e:
+            error_text = self.font.render(f"Error loading chart: {e}", True, CREAM_WHITE)
+            self.screen.blit(error_text, (WIDTH // 2 - error_text.get_width() // 2, HEIGHT // 2))
+
+            # Back button only
+            back_btn = pygame.Rect(30, HEIGHT - 80, 120, 50)
+            pygame.draw.rect(self.screen, WOOD_DARK, back_btn, border_radius=10)
+            pygame.draw.rect(self.screen, GOLD, back_btn, 3, border_radius=10)
+            back_text = self.font.render("Back", True, CREAM_WHITE)
+            back_text_rect = back_text.get_rect(center=back_btn.center)
+            self.screen.blit(back_text, back_text_rect)
+
+            return back_btn, None
+
+    def handle_chart_viewer(self):
+        """Handle the chart viewer screen"""
+        back_btn, nav_btns = self.show_chart_viewer()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return False
+
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                mouse_pos = pygame.mouse.get_pos()
+
+                if back_btn and back_btn.collidepoint(mouse_pos):
+                    self.game_state = self.HISTORY
+                    self.history_view = 'charts'
+                    return True
+
+                if nav_btns:
+                    prev_btn, next_btn = nav_btns
+                    charts_dir = self.stats.save_directory / "charts"
+                    chart_files = list(charts_dir.glob("*.png"))
+
+                    if prev_btn.collidepoint(mouse_pos):
+                        self.current_chart_index = (self.current_chart_index - 1) % len(chart_files)
+                    elif next_btn.collidepoint(mouse_pos):
+                        self.current_chart_index = (self.current_chart_index + 1) % len(chart_files)
+
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    self.game_state = self.HISTORY
+                    self.history_view = 'charts'
+                elif event.key == pygame.K_LEFT:
+                    charts_dir = self.stats.save_directory / "charts"
+                    chart_files = list(charts_dir.glob("*.png"))
+                    if chart_files:
+                        self.current_chart_index = (self.current_chart_index - 1) % len(chart_files)
+                elif event.key == pygame.K_RIGHT:
+                    charts_dir = self.stats.save_directory / "charts"
+                    chart_files = list(charts_dir.glob("*.png"))
+                    if chart_files:
+                        self.current_chart_index = (self.current_chart_index + 1) % len(chart_files)
+
+        return True
 
     def handle_time_selection(self):
         self.screen.fill(DARK_GRAY)
